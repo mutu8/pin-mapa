@@ -1,17 +1,29 @@
 # 📹 Sistema de Gestión de Cámaras en Mapa
 
-Sistema web para marcar, gestionar y visualizar cámaras de vigilancia en un mapa interactivo. MVP funcional para pruebas locales sin dependencias externas de Google Maps.
+Sistema web para gestionar y visualizar cámaras de vigilancia en un mapa interactivo de Trujillo, La Libertad, Perú.
 
 ## 🎯 Características
 
-- ✅ Mapa interactivo con OpenStreetMap (sin API keys)
-- ✅ Agregar cámaras haciendo click en el mapa
-- ✅ Editar y eliminar cámaras existentes
-- ✅ Filtros por tipo y estado de cámara
-- ✅ Clustering automático de marcadores cercanos
-- ✅ Persistencia en localStorage (sin backend)
-- ✅ 100% funcional en localhost
-- ✅ Arquitectura preparada para escalar
+- ✅ Mapa interactivo con OpenStreetMap centrado en Trujillo
+- ✅ Agregar cámaras haciendo click en el mapa (modo "Agregar Cámara")
+- ✅ Eliminar cámaras con click derecho o desde la lista
+- ✅ Agrupación por ubicaciones/calles con colores automáticos
+- ✅ Filtros por tipo, estado y ubicación
+- ✅ Popup hover sobre marcadores
+- ✅ Panel auto-ocultable después de 15 segundos
+- ✅ Persistencia con Supabase (PostgreSQL + PostGIS) o localStorage
+- ✅ Responsive y optimizado para producción
+- ✅ Deploy listo para Vercel
+
+## 🗄️ Base de Datos
+
+### Modo Desarrollo (localStorage)
+Sin configuración, funciona directamente con datos en el navegador.
+
+### Modo Producción (Supabase)
+Base de datos PostgreSQL con PostGIS para queries espaciales.
+
+Ver [DEPLOY.md](./DEPLOY.md) para instrucciones completas.
 
 ## 🚀 Quick Start
 

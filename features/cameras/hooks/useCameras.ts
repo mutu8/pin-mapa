@@ -1,6 +1,27 @@
 import { useState, useEffect } from 'react';
 import { Camera, CreateCameraDto, UpdateCameraDto, CameraFilters } from '../types/camera.types';
-import { cameraRepository } from '../repositories/localStorage.repository';
+// Cambiar entre localStorage y Supabase según configuración
+import { SupabaseCameraRepository } from '../repositories/supabase.repository';
+import { LocalStorageCameraRepository } from '../repositories/localStorage.repository';
+
+// Detectar si Supabase está configurado
+const isSupabaseConfigured = () => {
+  return !!(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && 
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+};
+
+// Instanciar el repositorio apropiado
+const getCameraRepository = () => {
+  const useSupabase = isSupabaseConfigured();
+  
+  return useSupabase 
+    ? new SupabaseCameraRepository() 
+    : new LocalStorageCameraRepository();
+};
+
+const cameraRepository = getCameraRepository();
 
 /**
  * Hook personalizado para gestionar cámaras
@@ -38,6 +59,7 @@ export function useCameras(filters?: CameraFilters) {
       setError(null);
       const newCamera = await cameraRepository.create(data);
       setCameras(prev => [...prev, newCamera]);
+      setAllCameras(prev => [...prev, newCamera]);
       return newCamera;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Error creating camera';
@@ -51,6 +73,7 @@ export function useCameras(filters?: CameraFilters) {
       setError(null);
       const updated = await cameraRepository.update(id, data);
       setCameras(prev => prev.map(c => c.id === id ? updated : c));
+      setAllCameras(prev => prev.map(c => c.id === id ? updated : c));
       return updated;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Error updating camera';
@@ -64,6 +87,7 @@ export function useCameras(filters?: CameraFilters) {
       setError(null);
       await cameraRepository.delete(id);
       setCameras(prev => prev.filter(c => c.id !== id));
+      setAllCameras(prev => prev.filter(c => c.id !== id));
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Error deleting camera';
       setError(errorMsg);

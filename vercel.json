@@ -1,0 +1,16 @@
+{
+  "name": "proyecto-mapas",
+  "description": "Sistema de Gestión de Cámaras de Seguridad con Mapas Interactivos",
+  "version": "1.0.0",
+  "author": "Tu Nombre",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tu-usuario/proyecto-mapas"
+  },
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key"
+    }
+  }
+}

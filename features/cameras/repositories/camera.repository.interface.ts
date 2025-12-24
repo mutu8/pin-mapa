@@ -11,3 +11,5 @@ export interface ICameraRepository {
   update(id: string, data: UpdateCameraDto): Promise<Camera>;
   delete(id: string): Promise<void>;
 }
+
+export type { CameraFilters };
