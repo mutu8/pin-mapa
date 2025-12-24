@@ -1,6 +1,6 @@
 'use client';
 
-import { Camera, CameraStatus, CameraType } from '../types/camera.types';
+import { Camera, CameraStatus, CameraType, getLocationColor } from '../types/camera.types';
 
 interface CameraListProps {
   cameras: Camera[];
@@ -61,6 +61,15 @@ export default function CameraList({ cameras, selectedCamera, onSelectCamera }: 
                       {camera.name}
                     </h4>
                     <div className="text-xs text-gray-600 mt-2 space-y-1">
+                      {camera.location && (
+                        <div 
+                          className="flex items-center gap-1.5 font-medium"
+                          style={{ color: getLocationColor(camera.location).primary }}
+                        >
+                          <span>📍</span>
+                          <span>{camera.location}</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-1.5">
                         <span className={`font-medium ${status.color}`}>{status.emoji}</span>
                         <span>{status.label}</span>

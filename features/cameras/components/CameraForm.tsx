@@ -7,6 +7,7 @@ interface CameraFormProps {
   camera?: Camera | null;
   initialPosition?: { lat: number; lng: number } | null;
   isViewOnly?: boolean;
+  availableLocations?: string[]; // Ubicaciones existentes para autocompletado
   onSubmit: (data: CreateCameraDto | UpdateCameraDto) => Promise<void>;
   onCancel: () => void;
   onDelete?: () => Promise<void>;
@@ -17,6 +18,7 @@ export default function CameraForm({
   camera, 
   initialPosition, 
   isViewOnly = false,
+  availableLocations = [],
   onSubmit, 
   onCancel,
   onDelete,
@@ -25,6 +27,7 @@ export default function CameraForm({
   const [name, setName] = useState('');
   const [type, setType] = useState<CameraType>(CameraType.FIXED);
   const [status, setStatus] = useState<CameraStatus>(CameraStatus.ACTIVE);
+  const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -38,11 +41,13 @@ export default function CameraForm({
       setName(camera.name);
       setType(camera.type);
       setStatus(camera.status);
+      setLocation(camera.location || '');
       setNotes(camera.notes || '');
     } else {
       setName('');
       setType(CameraType.FIXED);
       setStatus(CameraStatus.ACTIVE);
+      setLocation('');
       setNotes('');
     }
     // Resetear modo edición cuando cambia la vista
@@ -55,12 +60,19 @@ export default function CameraForm({
 
     try {
       if (camera) {
-        await onSubmit({ name, type, status, notes: notes || undefined });
+        await onSubmit({ 
+          name, 
+          type, 
+          status, 
+          location: location.trim() || undefined,
+          notes: notes || undefined 
+        });
       } else if (initialPosition) {
         await onSubmit({
           name,
           type,
           status,
+          location: location.trim() || undefined,
           notes: notes || undefined,
           lat: initialPosition.lat,
           lng: initialPosition.lng,
@@ -92,6 +104,31 @@ export default function CameraForm({
           }`}
           placeholder="Cámara Principal"
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          📍 Ubicación / Calle
+        </label>
+        <input
+          type="text"
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          disabled={isReadOnly}
+          className={`w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+            isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''
+          }`}
+          placeholder="Ej: Sebastián Llorente, Av. España..."
+          list="locations-datalist"
+        />
+        <datalist id="locations-datalist">
+          {availableLocations.map(loc => (
+            <option key={loc} value={loc} />
+          ))}
+        </datalist>
+        <p className="text-xs text-gray-500 mt-1">
+          Cámaras de la misma ubicación tendrán el mismo color en el mapa
+        </p>
       </div>
 
       <div>

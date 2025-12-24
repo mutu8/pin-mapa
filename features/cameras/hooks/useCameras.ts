@@ -8,6 +8,7 @@ import { cameraRepository } from '../repositories/localStorage.repository';
  */
 export function useCameras(filters?: CameraFilters) {
   const [cameras, setCameras] = useState<Camera[]>([]);
+  const [allCameras, setAllCameras] = useState<Camera[]>([]); // Todas sin filtrar
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,6 +18,10 @@ export function useCameras(filters?: CameraFilters) {
       setError(null);
       const data = await cameraRepository.getAll(filters);
       setCameras(data);
+      
+      // Cargar todas las cámaras sin filtrar para la leyenda
+      const allData = await cameraRepository.getAll();
+      setAllCameras(allData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error loading cameras');
     } finally {
@@ -26,7 +31,7 @@ export function useCameras(filters?: CameraFilters) {
 
   useEffect(() => {
     loadCameras();
-  }, [filters?.type, filters?.status, filters?.searchText]);
+  }, [filters?.type, filters?.status, filters?.location, filters?.searchText]);
 
   const createCamera = async (data: CreateCameraDto) => {
     try {
@@ -67,8 +72,7 @@ export function useCameras(filters?: CameraFilters) {
   };
 
   return {
-    cameras,
-    loading,
+    cameras,    allCameras,    loading,
     error,
     createCamera,
     updateCamera,

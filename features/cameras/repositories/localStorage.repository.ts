@@ -38,10 +38,14 @@ export class LocalStorageCameraRepository implements ICameraRepository {
       if (filters.status) {
         cameras = cameras.filter(c => c.status === filters.status);
       }
+      if (filters.location) {
+        cameras = cameras.filter(c => c.location === filters.location);
+      }
       if (filters.searchText) {
         const search = filters.searchText.toLowerCase();
         cameras = cameras.filter(c => 
           c.name.toLowerCase().includes(search) ||
+          c.location?.toLowerCase().includes(search) ||
           c.notes?.toLowerCase().includes(search)
         );
       }

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Camera, CameraStatus, CameraType } from '../types/camera.types';
+import { Camera, CameraStatus, CameraType, getLocationColor } from '../types/camera.types';
 import { useCameras } from '../hooks/useCameras';
 import CameraForm from './CameraForm';
 import CameraList from './CameraList';
@@ -23,9 +23,15 @@ export default function MapView() {
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const tempMarkerRef = useRef<L.Marker | null>(null);
   const isAddModeRef = useRef(false);
+  const markersMapRef = useRef<Map<string, L.Marker>>(new Map()); // Mapa de ID -> Marker
   
-  const [filters, setFilters] = useState<{ type?: CameraType; status?: CameraStatus }>({});
-  const { cameras, loading, createCamera, updateCamera, deleteCamera } = useCameras(filters);
+  const [filters, setFilters] = useState<{ type?: CameraType; status?: CameraStatus; location?: string }>({});
+  const { cameras, allCameras, loading, createCamera, updateCamera, deleteCamera } = useCameras(filters);
+  
+  // Extraer ubicaciones únicas para autocompletado (de todas las cámaras)
+  const availableLocations = Array.from(new Set(
+    allCameras.map(c => c.location).filter(Boolean) as string[]
+  )).sort();
   
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -33,8 +39,10 @@ export default function MapView() {
   const [isAddMode, setIsAddMode] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isViewMode, setIsViewMode] = useState(false);
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [isPanelOpen, setIsPanelOpen] = useState(true); // Abierto por defecto
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showAutoHideNotice, setShowAutoHideNotice] = useState(false);
+  const autoHideTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Inicializar mapa
   useEffect(() => {
@@ -115,10 +123,11 @@ export default function MapView() {
       setNewMarkerPosition({ lat: e.latlng.lat, lng: e.latlng.lng });
       setSelectedCamera(null);
       
-      // Si el formulario no está abierto, abrirlo
+      // Si el formulario no está abierto, abrirlo en modo edición
       if (!isFormOpen) {
         setIsFormOpen(true);
         setIsPanelOpen(true);
+        setIsViewMode(false); // Modo edición para agregar
       }
       
       // Desactivar modo agregar solo después del primer click
@@ -149,55 +158,48 @@ export default function MapView() {
     if (!markersLayerRef.current) return;
 
     markersLayerRef.current.clearLayers();
+    markersMapRef.current.clear(); // Limpiar mapa de marcadores
 
     cameras.forEach(camera => {
-      // Determinar color y estilo según estado con colores más distintivos
-      const statusConfig = {
-        [CameraStatus.ACTIVE]: { 
-          bg: '#10b981', // Verde brillante
-          border: '#059669',
-          shadow: '0 2px 8px rgba(16, 185, 129, 0.6)',
-          icon: '✓'
-        },
-        [CameraStatus.INACTIVE]: { 
-          bg: '#6b7280', // Gris
-          border: '#4b5563',
-          shadow: '0 2px 8px rgba(107, 114, 128, 0.6)',
-          icon: '○'
-        },
-        [CameraStatus.MAINTENANCE]: { 
-          bg: '#f59e0b', // Naranja brillante
-          border: '#d97706',
-          shadow: '0 2px 8px rgba(245, 158, 11, 0.6)',
-          icon: '⚙'
-        },
-        [CameraStatus.OFFLINE]: { 
-          bg: '#ef4444', // Rojo brillante
-          border: '#dc2626',
-          shadow: '0 2px 8px rgba(239, 68, 68, 0.6)',
-          icon: '✕'
-        },
+      // Obtener colores basados en la ubicación
+      const locationColors = getLocationColor(camera.location);
+      
+      // Determinar icono según estado
+      const statusIcons = {
+        [CameraStatus.ACTIVE]: '✓',
+        [CameraStatus.INACTIVE]: '○',
+        [CameraStatus.MAINTENANCE]: '⚙',
+        [CameraStatus.OFFLINE]: '✕',
       };
 
-      const config = statusConfig[camera.status];
+      const icon = statusIcons[camera.status];
+      const shadow = `0 2px 8px rgba(0, 0, 0, 0.4)`;
 
-      // Pin estilo lágrima invertida más compacto
-      const icon = L.divIcon({
+      // Pin estilo lágrima invertida con color basado en ubicación
+      const markerIcon = L.divIcon({
         className: 'custom-marker',
         html: `
           <div style="position: relative; width: 28px; height: 38px;">
-            <svg width="28" height="38" viewBox="0 0 28 38" style="filter: drop-shadow(${config.shadow})">
+            <svg width="28" height="38" viewBox="0 0 28 38" 
+                 style="filter: drop-shadow(${shadow}); transition: all 0.3s ease;"
+                 class="marker-pin">
               <path d="M14 0C8.5 0 4 4.5 4 10c0 8 10 24 10 24s10-16 10-24c0-5.5-4.5-10-10-10z" 
-                    fill="${config.bg}" 
+                    fill="${locationColors.primary}" 
                     stroke="white" 
                     stroke-width="2.5"/>
-              <circle cx="14" cy="10" r="6" fill="${config.border}"/>
+              <circle cx="14" cy="10" r="6" fill="${locationColors.secondary}"/>
               <text x="14" y="14" 
                     text-anchor="middle" 
                     fill="white" 
                     font-size="10" 
-                    font-weight="bold">${config.icon}</text>
+                    font-weight="bold">${icon}</text>
             </svg>
+            <style>
+              .marker-pin:hover {
+                filter: drop-shadow(0 4px 16px rgba(59, 130, 246, 0.8)) brightness(1.2);
+                transform: scale(1.15);
+              }
+            </style>
           </div>
         `,
         iconSize: [28, 38],
@@ -205,7 +207,7 @@ export default function MapView() {
         popupAnchor: [0, -38],
       });
 
-      const marker = L.marker([camera.lat, camera.lng], { icon });
+      const marker = L.marker([camera.lat, camera.lng], { icon: markerIcon });
       
       const statusLabels = {
         [CameraStatus.ACTIVE]: '🟢 Activa',
@@ -225,6 +227,12 @@ export default function MapView() {
         <div class="p-3 min-w-[200px]">
           <h3 class="font-bold text-lg mb-2 text-gray-800">${camera.name}</h3>
           <div class="space-y-1 text-sm">
+            ${camera.location ? `
+            <div class="flex items-center gap-2">
+              <span class="font-semibold">Ubicación:</span>
+              <span style="color: ${locationColors.primary}; font-weight: 600;">📍 ${camera.location}</span>
+            </div>
+            ` : ''}
             <div class="flex items-center gap-2">
               <span class="font-semibold">Tipo:</span>
               <span>${typeLabels[camera.type]}</span>
@@ -238,33 +246,47 @@ export default function MapView() {
         </div>
       `);
 
+      // Mostrar popup al pasar el mouse por encima
+      marker.on('mouseover', () => {
+        marker.openPopup();
+      });
+      
+      marker.on('mouseout', () => {
+        marker.closePopup();
+      });
+
+      // Clic izquierdo para zoom máximo
       marker.on('click', () => {
-        // Siempre modo visualización al hacer click en marcador
-        setSelectedCamera(camera);
-        setNewMarkerPosition(null);
-        setIsFormOpen(true);
-        setIsViewMode(true);
-        setIsPanelOpen(true);
-        
-        // Zoom máximo a la cámara
         if (mapRef.current) {
           mapRef.current.setView([camera.lat, camera.lng], 19);
         }
+        marker.openPopup();
       });
 
+      // Clic derecho para eliminar
+      marker.on('contextmenu', (e) => {
+        L.DomEvent.stopPropagation(e);
+        
+        if (confirm(`¿ Estás seguro de eliminar "${camera.name}"?\n\nEsta acción no se puede deshacer.`)) {
+          deleteCamera(camera.id);
+        }
+      });
+
+      markersMapRef.current.set(camera.id, marker); // Guardar referencia
       markersLayerRef.current!.addLayer(marker);
     });
-  }, [cameras]);
+  }, [cameras, deleteCamera]);
 
   const handleCameraSelect = (camera: Camera) => {
-    setSelectedCamera(camera);
-    setNewMarkerPosition(null);
-    setIsFormOpen(true);
-    setIsViewMode(true); // Modo visualización desde la lista
-    setIsPanelOpen(true); // Abrir panel
-    
+    // Hacer zoom a la cámara
     if (mapRef.current) {
-      mapRef.current.setView([camera.lat, camera.lng], 19); // Zoom máximo
+      mapRef.current.setView([camera.lat, camera.lng], 19);
+    }
+    
+    // Abrir el popup del marcador
+    const marker = markersMapRef.current.get(camera.id);
+    if (marker) {
+      marker.openPopup();
     }
   };
 
@@ -321,6 +343,33 @@ export default function MapView() {
     }
   };
 
+  // Auto-ocultar panel después de 15 segundos de inactividad
+  const resetAutoHideTimer = () => {
+    if (autoHideTimerRef.current) {
+      clearTimeout(autoHideTimerRef.current);
+    }
+    
+    if (isPanelOpen && !isFormOpen) {
+      autoHideTimerRef.current = setTimeout(() => {
+        setShowAutoHideNotice(true);
+        setTimeout(() => {
+          setIsPanelOpen(false);
+          setShowAutoHideNotice(false);
+        }, 2000); // Mostrar notificación 2 segundos antes de ocultar
+      }, 15000); // 15 segundos de inactividad
+    }
+  };
+
+  // Resetear timer cuando hay interacción con el panel
+  useEffect(() => {
+    resetAutoHideTimer();
+    return () => {
+      if (autoHideTimerRef.current) {
+        clearTimeout(autoHideTimerRef.current);
+      }
+    };
+  }, [isPanelOpen, isFormOpen, cameras, filters]);
+
   return (
     <div className="flex h-full">
       {/* Mapa */}
@@ -355,12 +404,29 @@ export default function MapView() {
       </div>
 
       {/* Panel lateral */}
-      <div className={`bg-white shadow-lg overflow-y-auto flex flex-col transition-all duration-300 ${
-        isPanelOpen ? 'w-96' : 'w-0'
-      }`}>
+      <div 
+        className={`bg-white shadow-lg overflow-y-auto flex flex-col transition-all duration-300 ${
+          isPanelOpen ? 'w-96' : 'w-0'
+        }`}
+        onMouseEnter={resetAutoHideTimer}
+        onMouseMove={resetAutoHideTimer}
+        onClick={resetAutoHideTimer}
+      >
         {isPanelOpen && (
           <>
-            <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+            {/* Notificación sutil de auto-ocultado */}
+            {showAutoHideNotice && (
+              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1100] animate-fade-in">
+                <div className="bg-indigo-600 text-white px-4 py-2 rounded-full shadow-2xl text-sm flex items-center gap-2">
+                  <svg className="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                  </svg>
+                  Panel ocultándose...
+                </div>
+              </div>
+            )}
+            
+            <div className="p-4 border-b bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white shadow-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {isFormOpen && (
@@ -377,84 +443,66 @@ export default function MapView() {
                           tempMarkerRef.current = null;
                         }
                       }}
-                      className="text-gray-600 hover:text-gray-800 transition"
+                      className="text-white hover:bg-white/20 p-2 rounded-lg transition-all"
                       title="Volver a la lista"
                     >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                       </svg>
                     </button>
                   )}
-                  <div>
-                    <h1 className="text-2xl font-bold text-gray-800">🎥 Cámaras - Trujillo</h1>
-                    <p className="text-sm text-gray-600 mt-1">
-                      🖱️ Usa el botón "Agregar Cámara"
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      📍 Trujillo, La Libertad, Perú
-                    </p>
-                  </div>
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <span className="text-2xl">📹</span>
+                    {isFormOpen ? 'Nueva Cámara' : 'Cámaras'}
+                  </h2>
                 </div>
                 <button
                   onClick={handlePanelClose}
-                  className="text-gray-500 hover:text-gray-700 transition"
+                  className="text-white hover:bg-white/20 p-2 rounded-lg transition-all hover:rotate-90 duration-300"
+                  title="Cerrar panel"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
+              
+              {!isFormOpen && (
+                <div className="mt-3 flex items-center justify-between">
+                  <p className="text-sm text-indigo-100 flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                    {cameras.length} cámara{cameras.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              )}
             </div>
 
-            <FilterPanel filters={filters} onChange={setFilters} />
+            <FilterPanel filters={filters} cameras={cameras} allCameras={allCameras} onChange={setFilters} />
 
-            {isFormOpen && (
+            {/* Formulario solo para agregar nuevas cámaras */}
+            {isFormOpen && !selectedCamera && newMarkerPosition && (
               <div className="p-4 border-b bg-blue-50">
                 <CameraForm
-                  camera={selectedCamera}
+                  camera={null}
                   initialPosition={newMarkerPosition}
-                  isViewOnly={isViewMode}
+                  isViewOnly={false}
+                  availableLocations={availableLocations}
                   onSubmit={async (data) => {
-                    if (selectedCamera) {
-                      // Actualizar cámara existente - mantener panel abierto
-                      await updateCamera(selectedCamera.id, data);
-                      handleFormClose();
-                    } else {
-                      // Crear nueva cámara - cerrar todo
-                      await createCamera(data as any);
-                      setIsFormOpen(false);
-                      setSelectedCamera(null);
-                      setNewMarkerPosition(null);
-                      setIsAddMode(false);
-                      setIsViewMode(false);
-                      setIsPanelOpen(false);
-                      
-                      if (tempMarkerRef.current && mapRef.current) {
-                        mapRef.current.removeLayer(tempMarkerRef.current);
-                        tempMarkerRef.current = null;
-                      }
-                    }
-                  }}
-                  onCancel={handleFormClose}
-                  onDelete={selectedCamera ? async () => {
-                    await deleteCamera(selectedCamera.id);
-                    // Cerrar formulario pero mantener panel abierto
+                    // Crear nueva cámara - cerrar todo
+                    await createCamera(data as any);
                     setIsFormOpen(false);
                     setSelectedCamera(null);
                     setNewMarkerPosition(null);
                     setIsAddMode(false);
                     setIsViewMode(false);
+                    setIsPanelOpen(false);
                     
-                    // Remover marcador temporal
                     if (tempMarkerRef.current && mapRef.current) {
                       mapRef.current.removeLayer(tempMarkerRef.current);
                       tempMarkerRef.current = null;
                     }
-                    // Panel permanece abierto para ver la lista
-                  } : undefined}
-                  onEdit={() => {
-                    setIsViewMode(false);
                   }}
+                  onCancel={handleFormClose}
                 />
               </div>
             )}
