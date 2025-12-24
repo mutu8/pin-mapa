@@ -1,10 +1,6 @@
 {
   "name": "proyecto-mapas",
   "version": "1.0.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/mutu8/pin-mapa"
-  },
   "build": {
     "env": {
       "NEXT_PUBLIC_SUPABASE_URL": "https://velullpgjkpfbiogctlx.supabase.co",
