@@ -160,6 +160,19 @@ export default function MapView() {
       setIsAddMode(false);
     });
 
+    // Ocultar panel cuando se navega por el mapa
+    map.on('dragstart', () => {
+      if (isPanelOpen && !isFormOpen) {
+        setIsPanelOpen(false);
+      }
+    });
+
+    map.on('zoomstart', () => {
+      if (isPanelOpen && !isFormOpen) {
+        setIsPanelOpen(false);
+      }
+    });
+
     return () => {
       map.remove();
       mapRef.current = null;
