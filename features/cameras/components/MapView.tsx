@@ -48,16 +48,17 @@ export default function MapView() {
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    // Trujillo ciudad, La Libertad, Perú
-    const map = L.map(mapContainerRef.current).setView([-8.1116, -79.0288], 13);
-
-    // Límites de Trujillo metropolitano
+    // Límites calculados exactamente desde los 8 puntos proporcionados
+    // lat: -8.085936 (norte) a -8.112493 (sur)
+    // lng: -79.040500 (oeste) a -78.990426 (este)
     const bounds = L.latLngBounds(
-      [-8.20, -79.10],  // Suroeste
-      [-8.00, -78.95]   // Noreste
+      [-8.113, -79.041],  // Suroeste más ajustado
+      [-8.085, -78.990]   // Noreste más ajustado
     );
-    map.setMaxBounds(bounds);
-    map.setMinZoom(12);
+
+    // Crear el mapa con vista inicial en el centro del área
+    const center = bounds.getCenter();
+    const map = L.map(mapContainerRef.current).setView(center, 15);
 
     // Configuración optimizada para zoom out
     map.options.zoomAnimation = true;
@@ -65,16 +66,29 @@ export default function MapView() {
     map.options.fadeAnimation = true;
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors | Trujillo, La Libertad',
+      attribution: '© OpenStreetMap contributors | Zona Centro, Trujillo',
       maxZoom: 19,
-      minZoom: 12,
       updateWhenIdle: true, // Solo actualizar cuando el mapa esté quieto
       updateWhenZooming: false, // No actualizar durante zoom
       keepBuffer: 1, // Reducido a 1 para mejor performance en zoom out
-      bounds: bounds, // Limitar carga de tiles al área de Trujillo
       noWrap: true, // Evitar tiles duplicados
       tileSize: 256,
     }).addTo(map);
+
+    // Primero ajustar vista para ver todos los puntos
+    map.fitBounds(bounds, { padding: [30, 30] });
+    
+    // Obtener el zoom que calcula fitBounds (el mínimo para ver todo)
+    const calculatedZoom = map.getZoom();
+
+    // Hacer zoom in a un nivel más cercano para iniciar
+    map.setZoom(calculatedZoom + 1);
+
+    // Aplicar límites
+    map.setMaxBounds(bounds);
+    map.setMinZoom(calculatedZoom); // El zoom mínimo es el que muestra todos los puntos
+    map.options.maxBoundsViscosity = 1.0;
+    map.options.maxBoundsViscosity = 1.0; // Límites "duros"
 
     // Capa de marcadores sin clustering
     const markers = L.layerGroup();
@@ -315,6 +329,10 @@ export default function MapView() {
     resetAutoHideTimer();
   };
 
+  const handleCameraDelete = (camera: Camera) => {
+    deleteCamera(camera.id);
+  };
+
   const handleFormClose = () => {
     // Guardar estado actual antes de limpiar
     const wasAddingNew = !selectedCamera && newMarkerPosition !== null;
@@ -552,6 +570,7 @@ export default function MapView() {
               cameras={cameras}
               selectedCamera={selectedCamera}
               onSelectCamera={handleCameraSelect}
+              onDeleteCamera={handleCameraDelete}
             />
           </>
         )}
