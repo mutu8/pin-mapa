@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Camera, CameraStatus, CameraType, getLocationColor } from '../types/camera.types';
@@ -59,9 +59,21 @@ export default function MapView() {
     map.setMaxBounds(bounds);
     map.setMinZoom(12);
 
+    // Configuración optimizada para zoom out
+    map.options.zoomAnimation = true;
+    map.options.zoomAnimationThreshold = 4;
+    map.options.fadeAnimation = true;
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors | Trujillo, La Libertad',
       maxZoom: 19,
+      minZoom: 12,
+      updateWhenIdle: true, // Solo actualizar cuando el mapa esté quieto
+      updateWhenZooming: false, // No actualizar durante zoom
+      keepBuffer: 1, // Reducido a 1 para mejor performance en zoom out
+      bounds: bounds, // Limitar carga de tiles al área de Trujillo
+      noWrap: true, // Evitar tiles duplicados
+      tileSize: 256,
     }).addTo(map);
 
     // Capa de marcadores sin clustering
@@ -153,141 +165,154 @@ export default function MapView() {
     }
   }, [isAddMode]);
 
+  // Memoizar función de creación de iconos
+  const createMarkerIcon = useCallback((camera: Camera) => {
+    const locationColors = getLocationColor(camera.location);
+    const statusIcons = {
+      [CameraStatus.ACTIVE]: '✓',
+      [CameraStatus.INACTIVE]: '○',
+      [CameraStatus.MAINTENANCE]: '⚙',
+      [CameraStatus.OFFLINE]: '✕',
+    };
+    const icon = statusIcons[camera.status];
+    const shadow = `0 2px 8px rgba(0, 0, 0, 0.4)`;
+
+    return L.divIcon({
+      className: 'custom-marker',
+      html: `
+        <div style="position: relative; width: 28px; height: 38px;">
+          <svg width="28" height="38" viewBox="0 0 28 38" 
+               style="filter: drop-shadow(${shadow}); transition: all 0.3s ease;"
+               class="marker-pin">
+            <path d="M14 0C8.5 0 4 4.5 4 10c0 8 10 24 10 24s10-16 10-24c0-5.5-4.5-10-10-10z" 
+                  fill="${locationColors.primary}" 
+                  stroke="white" 
+                  stroke-width="2.5"/>
+            <circle cx="14" cy="10" r="6" fill="${locationColors.secondary}"/>
+            <text x="14" y="14" 
+                  text-anchor="middle" 
+                  fill="white" 
+                  font-size="10" 
+                  font-weight="bold">${icon}</text>
+          </svg>
+          <style>
+            .marker-pin:hover {
+              filter: drop-shadow(0 4px 16px rgba(59, 130, 246, 0.8)) brightness(1.2);
+              transform: scale(1.15);
+            }
+          </style>
+        </div>
+      `,
+      iconSize: [28, 38],
+      iconAnchor: [14, 38],
+      popupAnchor: [0, -38],
+    });
+  }, []);
+
   // Actualizar marcadores cuando cambien las cámaras
   useEffect(() => {
     if (!markersLayerRef.current) return;
 
     markersLayerRef.current.clearLayers();
-    markersMapRef.current.clear(); // Limpiar mapa de marcadores
+    markersMapRef.current.clear();
 
-    cameras.forEach(camera => {
-      // Obtener colores basados en la ubicación
-      const locationColors = getLocationColor(camera.location);
-      
-      // Determinar icono según estado
-      const statusIcons = {
-        [CameraStatus.ACTIVE]: '✓',
-        [CameraStatus.INACTIVE]: '○',
-        [CameraStatus.MAINTENANCE]: '⚙',
-        [CameraStatus.OFFLINE]: '✕',
-      };
+    // Renderizar marcadores de forma progresiva para mejorar rendimiento
+    const renderMarkers = () => {
+      cameras.forEach((camera, index) => {
+        // Usar requestIdleCallback para no bloquear el UI
+        const scheduleRender = () => {
+          const markerIcon = createMarkerIcon(camera);
+          const marker = L.marker([camera.lat, camera.lng], { icon: markerIcon });
+          
+          const statusLabels = {
+            [CameraStatus.ACTIVE]: '🟢 Activa',
+            [CameraStatus.INACTIVE]: '⚫ Inactiva',
+            [CameraStatus.MAINTENANCE]: '🟡 Mantenimiento',
+            [CameraStatus.OFFLINE]: '🔴 Fuera de línea',
+          };
 
-      const icon = statusIcons[camera.status];
-      const shadow = `0 2px 8px rgba(0, 0, 0, 0.4)`;
+          const typeLabels = {
+            [CameraType.FIXED]: '📹 Fija',
+            [CameraType.PTZ]: '🔄 PTZ',
+            [CameraType.DOME]: '⚫ Domo',
+            [CameraType.BULLET]: '🔫 Bullet',
+          };
 
-      // Pin estilo lágrima invertida con color basado en ubicación
-      const markerIcon = L.divIcon({
-        className: 'custom-marker',
-        html: `
-          <div style="position: relative; width: 28px; height: 38px;">
-            <svg width="28" height="38" viewBox="0 0 28 38" 
-                 style="filter: drop-shadow(${shadow}); transition: all 0.3s ease;"
-                 class="marker-pin">
-              <path d="M14 0C8.5 0 4 4.5 4 10c0 8 10 24 10 24s10-16 10-24c0-5.5-4.5-10-10-10z" 
-                    fill="${locationColors.primary}" 
-                    stroke="white" 
-                    stroke-width="2.5"/>
-              <circle cx="14" cy="10" r="6" fill="${locationColors.secondary}"/>
-              <text x="14" y="14" 
-                    text-anchor="middle" 
-                    fill="white" 
-                    font-size="10" 
-                    font-weight="bold">${icon}</text>
-            </svg>
-            <style>
-              .marker-pin:hover {
-                filter: drop-shadow(0 4px 16px rgba(59, 130, 246, 0.8)) brightness(1.2);
-                transform: scale(1.15);
-              }
-            </style>
-          </div>
-        `,
-        iconSize: [28, 38],
-        iconAnchor: [14, 38],
-        popupAnchor: [0, -38],
-      });
+          const locationColors = getLocationColor(camera.location);
 
-      const marker = L.marker([camera.lat, camera.lng], { icon: markerIcon });
-      
-      const statusLabels = {
-        [CameraStatus.ACTIVE]: '🟢 Activa',
-        [CameraStatus.INACTIVE]: '⚫ Inactiva',
-        [CameraStatus.MAINTENANCE]: '🟡 Mantenimiento',
-        [CameraStatus.OFFLINE]: '🔴 Fuera de línea',
-      };
-
-      const typeLabels = {
-        [CameraType.FIXED]: '📹 Fija',
-        [CameraType.PTZ]: '🔄 PTZ',
-        [CameraType.DOME]: '⚫ Domo',
-        [CameraType.BULLET]: '🔫 Bullet',
-      };
-
-      marker.bindPopup(`
-        <div class="p-3 min-w-[200px]">
-          <h3 class="font-bold text-lg mb-2 text-gray-800">${camera.name}</h3>
-          <div class="space-y-1 text-sm">
-            ${camera.location ? `
-            <div class="flex items-center gap-2">
-              <span class="font-semibold">Ubicación:</span>
-              <span style="color: ${locationColors.primary}; font-weight: 600;">📍 ${camera.location}</span>
+          marker.bindPopup(`
+            <div class="p-3 min-w-[200px]">
+              <h3 class="font-bold text-lg mb-2 text-gray-800">${camera.name}</h3>
+              <div class="space-y-1 text-sm">
+                ${camera.location ? `
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold">Ubicación:</span>
+                  <span style="color: ${locationColors.primary}; font-weight: 600;">📍 ${camera.location}</span>
+                </div>
+                ` : ''}
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold">Tipo:</span>
+                  <span>${typeLabels[camera.type]}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold">Estado:</span>
+                  <span>${statusLabels[camera.status]}</span>
+                </div>
+              </div>
+              ${camera.notes ? `<p class="text-xs text-gray-600 mt-2 pt-2 border-t">${camera.notes}</p>` : ''}
             </div>
-            ` : ''}
-            <div class="flex items-center gap-2">
-              <span class="font-semibold">Tipo:</span>
-              <span>${typeLabels[camera.type]}</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="font-semibold">Estado:</span>
-              <span>${statusLabels[camera.status]}</span>
-            </div>
-          </div>
-          ${camera.notes ? `<p class="text-xs text-gray-600 mt-2 pt-2 border-t">${camera.notes}</p>` : ''}
-        </div>
-      `);
+          `);
 
-      // Mostrar popup al pasar el mouse por encima
-      marker.on('mouseover', () => {
-        marker.openPopup();
-      });
-      
-      marker.on('mouseout', () => {
-        marker.closePopup();
-      });
+          marker.on('mouseover', () => marker.openPopup());
+          marker.on('mouseout', () => marker.closePopup());
+          marker.on('click', () => {
+            if (mapRef.current) {
+              mapRef.current.setView([camera.lat, camera.lng], 19);
+            }
+            marker.openPopup();
+          });
+          marker.on('contextmenu', (e) => {
+            L.DomEvent.stopPropagation(e);
+            if (confirm(`¿ Estás seguro de eliminar "${camera.name}"?\n\nEsta acción no se puede deshacer.`)) {
+              deleteCamera(camera.id);
+            }
+          });
 
-      // Clic izquierdo para zoom máximo
-      marker.on('click', () => {
-        if (mapRef.current) {
-          mapRef.current.setView([camera.lat, camera.lng], 19);
-        }
-        marker.openPopup();
-      });
+          markersMapRef.current.set(camera.id, marker);
+          markersLayerRef.current!.addLayer(marker);
+        };
 
-      // Clic derecho para eliminar
-      marker.on('contextmenu', (e) => {
-        L.DomEvent.stopPropagation(e);
-        
-        if (confirm(`¿ Estás seguro de eliminar "${camera.name}"?\n\nEsta acción no se puede deshacer.`)) {
-          deleteCamera(camera.id);
+        // Renderizar primeros 10 inmediatamente, resto de forma diferida
+        if (index < 10) {
+          scheduleRender();
+        } else {
+          setTimeout(scheduleRender, index * 5); // 5ms entre cada marcador
         }
       });
+    };
 
-      markersMapRef.current.set(camera.id, marker); // Guardar referencia
-      markersLayerRef.current!.addLayer(marker);
-    });
-  }, [cameras, deleteCamera]);
+    renderMarkers();
+  }, [cameras, createMarkerIcon, deleteCamera]);
 
   const handleCameraSelect = (camera: Camera) => {
-    // Hacer zoom a la cámara
+    // Hacer zoom a la cámara con animación suave
     if (mapRef.current) {
-      mapRef.current.setView([camera.lat, camera.lng], 19);
+      mapRef.current.flyTo([camera.lat, camera.lng], 19, {
+        duration: 1.0,
+        easeLinearity: 0.25
+      });
     }
     
-    // Abrir el popup del marcador
-    const marker = markersMapRef.current.get(camera.id);
-    if (marker) {
-      marker.openPopup();
-    }
+    // Abrir el popup del marcador después de un pequeño delay para que termine la animación
+    setTimeout(() => {
+      const marker = markersMapRef.current.get(camera.id);
+      if (marker) {
+        marker.openPopup();
+      }
+    }, 1100); // Esperar a que termine la animación de flyTo
+    
+    // Resetear timer de auto-hide
+    resetAutoHideTimer();
   };
 
   const handleFormClose = () => {
@@ -370,6 +395,18 @@ export default function MapView() {
     };
   }, [isPanelOpen, isFormOpen, cameras, filters]);
 
+  // Reajustar tamaño del mapa cuando el panel se abre/cierra
+  useEffect(() => {
+    if (!mapRef.current) return;
+    
+    // Esperar a que termine la animación CSS (300ms) antes de reajustar
+    const timer = setTimeout(() => {
+      mapRef.current?.invalidateSize({ animate: false, pan: false });
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [isPanelOpen]);
+
   return (
     <div className="flex h-full">
       {/* Mapa */}
@@ -405,9 +442,13 @@ export default function MapView() {
 
       {/* Panel lateral */}
       <div 
-        className={`bg-white shadow-lg overflow-y-auto flex flex-col transition-all duration-300 ${
+        className={`bg-white shadow-lg overflow-y-auto flex flex-col transition-all duration-300 ease-out ${
           isPanelOpen ? 'w-96' : 'w-0'
         }`}
+        style={{ 
+          willChange: isPanelOpen ? 'auto' : 'width',
+          transform: 'translateZ(0)' // Force GPU acceleration
+        }}
         onMouseEnter={resetAutoHideTimer}
         onMouseMove={resetAutoHideTimer}
         onClick={resetAutoHideTimer}
