@@ -1,15 +1,14 @@
 {
   "name": "proyecto-mapas",
   "version": "1.0.0",
-  "author": "Tu Nombre",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tu-usuario/proyecto-mapas"
+    "url": "https://github.com/mutu8/pin-mapa"
   },
   "build": {
     "env": {
-      "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
-      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key"
+      "NEXT_PUBLIC_SUPABASE_URL": "https://velullpgjkpfbiogctlx.supabase.co",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_xBdgxliz0_E8lVrkYStlFw_vAAn_3Wq"
     }
   }
 }
