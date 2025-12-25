@@ -8,6 +8,7 @@ import { useCameras } from '../hooks/useCameras';
 import CameraForm from './CameraForm';
 import CameraList from './CameraList';
 import FilterPanel from './FilterPanel';
+import { getStationColor, getStationById } from '../constants/stations';
 import StreetSearch from '@/components/StreetSearch';
 
 // Fix para iconos de Leaflet en Next.js
@@ -27,7 +28,7 @@ export default function MapView() {
   const isAddModeRef = useRef(false);
   const markersMapRef = useRef<Map<string, L.Marker>>(new Map()); // Mapa de ID -> Marker
   
-  const [filters, setFilters] = useState<{ type?: CameraType; status?: CameraStatus; location?: string }>({});
+  const [filters, setFilters] = useState<{ type?: CameraType; status?: CameraStatus; location?: string; stationId?: string }>({});
   const { cameras, allCameras, loading, createCamera, updateCamera, deleteCamera } = useCameras(filters);
   
   // Extraer ubicaciones únicas para autocompletado (de todas las cámaras)
@@ -38,6 +39,7 @@ export default function MapView() {
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [newMarkerPosition, setNewMarkerPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [newMarkerAddress, setNewMarkerAddress] = useState<string>('');
   const [isAddMode, setIsAddMode] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isViewMode, setIsViewMode] = useState(false);
@@ -111,12 +113,13 @@ export default function MapView() {
     mapRef.current = map;
 
     // Click en el mapa para agregar cámara (solo en modo agregar)
-    const handleMapClick = (e: L.LeafletMouseEvent) => {
+    const handleMapClick = async (e: L.LeafletMouseEvent) => {
       if (!isAddModeRef.current) {
         // Si no está en modo agregar, solo cerrar formulario (no todo el panel)
         setIsFormOpen(false);
         setSelectedCamera(null);
         setNewMarkerPosition(null);
+        setNewMarkerAddress('');
         
         // Remover marcador temporal si existe
         if (tempMarkerRef.current && map) {
@@ -164,9 +167,33 @@ export default function MapView() {
       const tempMarker = L.marker(e.latlng, { icon: tempIcon }).addTo(map);
       tempMarkerRef.current = tempMarker;
 
-      // Actualizar posición (incluso si el formulario ya está abierto)
+      // Actualizar posición
       setNewMarkerPosition({ lat: e.latlng.lat, lng: e.latlng.lng });
       setSelectedCamera(null);
+      
+      // Obtener dirección mediante reverse geocoding
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${e.latlng.lat}&lon=${e.latlng.lng}&zoom=18&addressdetails=1`,
+          {
+            headers: {
+              'Accept-Language': 'es'
+            }
+          }
+        );
+        const data = await response.json();
+        
+        // Extraer nombre de la calle o ubicación relevante
+        const address = data.address;
+        const street = address.road || address.pedestrian || address.street || 
+                      address.neighbourhood || address.suburb || 
+                      address.city_district || 'Ubicación sin nombre';
+        
+        setNewMarkerAddress(street);
+      } catch (error) {
+        console.error('Error obteniendo dirección:', error);
+        setNewMarkerAddress('');
+      }
       
       // Abrir formulario y panel
       setIsFormOpen(true);
@@ -415,6 +442,10 @@ export default function MapView() {
   // Memoizar función de creación de iconos
   const createMarkerIcon = useCallback((camera: Camera) => {
     const locationColors = getLocationColor(camera.location);
+    
+    // Usar color de estación si tiene, sino color por ubicación
+    const primaryColor = camera.stationId ? getStationColor(camera.stationId) : locationColors.primary;
+    
     const statusIcons = {
       [CameraStatus.ACTIVE]: '✓',
       [CameraStatus.INACTIVE]: '○',
@@ -432,7 +463,7 @@ export default function MapView() {
                style="filter: drop-shadow(${shadow}); transition: all 0.3s ease;"
                class="marker-pin">
             <path d="M14 0C8.5 0 4 4.5 4 10c0 8 10 24 10 24s10-16 10-24c0-5.5-4.5-10-10-10z" 
-                  fill="${locationColors.primary}" 
+                  fill="${primaryColor}" 
                   stroke="white" 
                   stroke-width="2.5"/>
             <circle cx="14" cy="10" r="6" fill="${locationColors.secondary}"/>
@@ -486,11 +517,18 @@ export default function MapView() {
           };
 
           const locationColors = getLocationColor(camera.location);
+          const stationInfo = camera.stationId ? getStationById(camera.stationId) : null;
 
           marker.bindPopup(`
             <div class="p-3 min-w-[200px]">
               <h3 class="font-bold text-lg mb-2 text-gray-800">${camera.name}</h3>
               <div class="space-y-1 text-sm">
+                ${camera.stationId && stationInfo ? `
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold">Estación:</span>
+                  <span style="background-color: ${stationInfo.color}; color: white; padding: 2px 8px; border-radius: 4px; font-weight: 600;">🏛️ ${stationInfo.name}</span>
+                </div>
+                ` : ''}
                 ${camera.location ? `
                 <div class="flex items-center gap-2">
                   <span class="font-semibold">Ubicación:</span>
@@ -910,6 +948,7 @@ export default function MapView() {
                 <CameraForm
                   camera={null}
                   initialPosition={newMarkerPosition}
+                  initialAddress={newMarkerAddress}
                   isViewOnly={false}
                   availableLocations={availableLocations}
                   onSubmit={async (data) => {
@@ -918,6 +957,7 @@ export default function MapView() {
                     setIsFormOpen(false);
                     setSelectedCamera(null);
                     setNewMarkerPosition(null);
+                    setNewMarkerAddress('');
                     setIsAddMode(false);
                     setIsViewMode(false);
                     setIsPanelOpen(false);

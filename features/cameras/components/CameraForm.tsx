@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { Camera, CameraType, CameraStatus, CreateCameraDto, UpdateCameraDto } from '../types/camera.types';
+import { STATIONS } from '../constants/stations';
 
 interface CameraFormProps {
   camera?: Camera | null;
   initialPosition?: { lat: number; lng: number } | null;
+  initialAddress?: string;
   isViewOnly?: boolean;
   availableLocations?: string[]; // Ubicaciones existentes para autocompletado
   onSubmit: (data: CreateCameraDto | UpdateCameraDto) => Promise<void>;
@@ -16,7 +18,8 @@ interface CameraFormProps {
 
 export default function CameraForm({ 
   camera, 
-  initialPosition, 
+  initialPosition,
+  initialAddress = '',
   isViewOnly = false,
   availableLocations = [],
   onSubmit, 
@@ -29,6 +32,7 @@ export default function CameraForm({
   const [status, setStatus] = useState<CameraStatus>(CameraStatus.ACTIVE);
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
+  const [stationId, setStationId] = useState<string>(STATIONS[0].id);
   const [submitting, setSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -43,16 +47,19 @@ export default function CameraForm({
       setStatus(camera.status);
       setLocation(camera.location || '');
       setNotes(camera.notes || '');
+      setStationId(camera.stationId || STATIONS[0].id);
     } else {
       setName('');
       setType(CameraType.FIXED);
       setStatus(CameraStatus.ACTIVE);
-      setLocation('');
+      setLocation(initialAddress);
+      setNotes('');
+      setStationId(STATIONS[0].id);
       setNotes('');
     }
     // Resetear modo edición cuando cambia la vista
     setIsEditing(false);
-  }, [camera, initialPosition, isViewOnly]); // Agregar initialPosition como dependencia
+  }, [camera, initialPosition, initialAddress, isViewOnly]); // Agregar initialAddress como dependencia
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +72,8 @@ export default function CameraForm({
           type, 
           status, 
           location: location.trim() || undefined,
-          notes: notes || undefined 
+          notes: notes || undefined,
+          stationId
         });
       } else if (initialPosition) {
         await onSubmit({
@@ -76,6 +84,7 @@ export default function CameraForm({
           notes: notes || undefined,
           lat: initialPosition.lat,
           lng: initialPosition.lng,
+          stationId
         });
       }
     } finally {
@@ -128,6 +137,30 @@ export default function CameraForm({
         </datalist>
         <p className="text-xs text-gray-500 mt-1">
           Cámaras de la misma ubicación tendrán el mismo color en el mapa
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          🏢 Estación *
+        </label>
+        <select
+          value={stationId}
+          onChange={(e) => setStationId(e.target.value)}
+          required
+          disabled={isReadOnly}
+          className={`w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+            isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''
+          }`}
+        >
+          {STATIONS.map(station => (
+            <option key={station.id} value={station.id}>
+              {station.code} - {station.name}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-gray-500 mt-1">
+          La cámara será asignada a esta estación
         </p>
       </div>
 

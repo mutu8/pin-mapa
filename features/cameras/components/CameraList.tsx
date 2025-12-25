@@ -2,6 +2,7 @@
 
 import { useState, memo } from 'react';
 import { Camera, CameraStatus, CameraType, getLocationColor } from '../types/camera.types';
+import { getStationById } from '../constants/stations';
 
 interface CameraListProps {
   cameras: Camera[];
@@ -176,6 +177,15 @@ function CameraList({ cameras, selectedCamera, onSelectCamera, onDeleteCamera }:
                       {camera.name}
                     </h4>
                     <div className="text-xs text-gray-600 mt-2 space-y-1">
+                      {/* Mostrar estación */}
+                      {camera.stationId && (
+                        <div 
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-white font-medium text-xs"
+                          style={{ backgroundColor: getStationById(camera.stationId)?.color || '#6b7280' }}
+                        >
+                          🏢 {getStationById(camera.stationId)?.code || 'N/A'}
+                        </div>
+                      )}
                       {camera.location && (
                         <div 
                           className="flex items-center gap-1.5 font-medium"

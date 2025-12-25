@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Camera, CreateCameraDto, UpdateCameraDto, CameraFilters } from '../types/camera.types';
 import { ICameraRepository } from './camera.repository.interface';
+import { STATIONS } from '../constants/stations';
 
 const STORAGE_KEY = 'cameras';
 
@@ -16,7 +17,12 @@ export class LocalStorageCameraRepository implements ICameraRepository {
     if (!data) return [];
     
     try {
-      return JSON.parse(data);
+      const cameras = JSON.parse(data);
+      // Migración: agregar stationId por defecto a cámaras antiguas
+      return cameras.map((camera: any) => ({
+        ...camera,
+        stationId: camera.stationId || STATIONS[0].id
+      }));
     } catch (error) {
       console.error('Error parsing cameras from localStorage:', error);
       return [];
@@ -40,6 +46,9 @@ export class LocalStorageCameraRepository implements ICameraRepository {
       }
       if (filters.location) {
         cameras = cameras.filter(c => c.location === filters.location);
+      }
+      if (filters.stationId) {
+        cameras = cameras.filter(c => c.stationId === filters.stationId);
       }
       if (filters.searchText) {
         const search = filters.searchText.toLowerCase();

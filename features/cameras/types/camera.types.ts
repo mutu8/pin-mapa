@@ -10,6 +10,7 @@ export interface Camera {
   notes?: string;
   lat: number;
   lng: number;
+  stationId: string; // ID de la estación a la que pertenece
   createdAt: string;
   updatedAt: string;
 }
@@ -39,6 +40,7 @@ export interface CreateCameraDto {
   notes?: string;
   lat: number;
   lng: number;
+  stationId: string;
 }
 
 /**
@@ -52,6 +54,7 @@ export interface UpdateCameraDto {
   notes?: string;
   lat?: number;
   lng?: number;
+  stationId?: string;
 }
 
 /**
@@ -62,6 +65,7 @@ export interface CameraFilters {
   status?: CameraStatus;
   location?: string;
   searchText?: string;
+  stationId?: string;
 }
 
 /**

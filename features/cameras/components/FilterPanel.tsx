@@ -1,16 +1,18 @@
 'use client';
 
 import { CameraType, CameraStatus, Camera, getLocationColor } from '../types/camera.types';
+import { STATIONS } from '../constants/stations';
 
 interface FilterPanelProps {
   filters: {
     type?: CameraType;
     status?: CameraStatus;
     location?: string;
+    stationId?: string;
   };
   cameras: Camera[]; // Cámaras filtradas (para el contador)
   allCameras: Camera[]; // Todas las cámaras sin filtrar (para la leyenda)
-  onChange: (filters: { type?: CameraType; status?: CameraStatus; location?: string }) => void;
+  onChange: (filters: { type?: CameraType; status?: CameraStatus; location?: string; stationId?: string }) => void;
 }
 
 export default function FilterPanel({ filters, cameras, allCameras, onChange }: FilterPanelProps) {
@@ -24,6 +26,27 @@ export default function FilterPanel({ filters, cameras, allCameras, onChange }: 
       <h3 className="text-sm font-semibold text-gray-700 mb-3">Filtros</h3>
       
       <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">
+            🏢 Estación
+          </label>
+          <select
+            value={filters.stationId || ''}
+            onChange={(e) => onChange({ 
+              ...filters, 
+              stationId: e.target.value || undefined 
+            })}
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Todas las estaciones</option>
+            {STATIONS.map(station => (
+              <option key={station.id} value={station.id}>
+                {station.code} - {station.name.replace('Estación ', '')}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">
             Tipo

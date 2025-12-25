@@ -19,14 +19,18 @@ export class SupabaseCameraRepository implements ICameraRepository {
       if (filters?.location) {
         query = query.eq('location', filters.location);
       }
+      if (filters?.stationId) {
+        query = query.eq('station_id', filters.stationId);
+      }
 
       const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
       
-      // Convertir created_at/updated_at a createdAt/updatedAt
+      // Convertir created_at/updated_at a createdAt/updatedAt y station_id a stationId
       return (data || []).map(item => ({
         ...item,
+        stationId: item.station_id || 'nsp',
         createdAt: item.created_at,
         updatedAt: item.updated_at
       }));
@@ -52,6 +56,7 @@ export class SupabaseCameraRepository implements ICameraRepository {
       
       return {
         ...data,
+        stationId: data.station_id || 'nsp',
         createdAt: data.created_at,
         updatedAt: data.updated_at
       };
@@ -65,9 +70,21 @@ export class SupabaseCameraRepository implements ICameraRepository {
     try {
       if (!supabase) throw new Error('Supabase not configured');
       
+      // Convertir stationId a station_id para Supabase
+      const dbCamera = {
+        name: camera.name,
+        type: camera.type,
+        status: camera.status,
+        lat: camera.lat,
+        lng: camera.lng,
+        location: camera.location,
+        notes: camera.notes,
+        station_id: camera.stationId
+      };
+      
       const { data, error } = await supabase
         .from('cameras')
-        .insert([camera])
+        .insert([dbCamera])
         .select()
         .single();
 
@@ -75,6 +92,7 @@ export class SupabaseCameraRepository implements ICameraRepository {
       
       return {
         ...data,
+        stationId: data.station_id || 'nsp',
         createdAt: data.created_at,
         updatedAt: data.updated_at
       };
@@ -88,9 +106,16 @@ export class SupabaseCameraRepository implements ICameraRepository {
     try {
       if (!supabase) throw new Error('Supabase not configured');
       
+      // Convertir stationId a station_id si existe
+      const dbCamera: any = { ...camera };
+      if (camera.stationId) {
+        dbCamera.station_id = camera.stationId;
+        delete dbCamera.stationId;
+      }
+      
       const { data, error } = await supabase
         .from('cameras')
-        .update(camera)
+        .update(dbCamera)
         .eq('id', id)
         .select()
         .single();
@@ -99,6 +124,7 @@ export class SupabaseCameraRepository implements ICameraRepository {
       
       return {
         ...data,
+        stationId: data.station_id || 'nsp',
         createdAt: data.created_at,
         updatedAt: data.updated_at
       };
