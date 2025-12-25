@@ -714,60 +714,13 @@ export default function MapView() {
           </div>
         )}
         
-        {!showMapSearch && (
-          /* Botón para mostrar buscador - solo icono con hover RGB */
-          <button
-            onClick={() => {
-              setShowMapSearch(true);
-              setLastInteractionTime(Date.now());
-            }}
-            className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] 
-                     bg-white hover:bg-white
-                     w-12 h-12 rounded-full shadow-lg
-                     hover:shadow-2xl transition-all duration-300 
-                     flex items-center justify-center group animate-scaleIn
-                     border-2 border-transparent hover:border-indigo-200
-                     relative overflow-hidden"
-            title="Buscar ubicación"
-          >
-            {/* Efecto RGB en hover */}
-            <div className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 animate-pulse"></div>
-            <svg className="w-6 h-6 text-indigo-600 group-hover:text-indigo-700 group-hover:scale-110 transition-all relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </button>
-        )}
+
         
-        {/* Botón para activar modo agregar */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!isAddMode) {
-              // Solo abrir modal de búsqueda, NO activar modo agregar todavía
-              setShowSearchModal(true);
-            } else {
-              // Cancelar modo agregar
-              setIsAddMode(false);
-              isAddModeRef.current = false;
-              setShowSearchModal(false);
-            }
-          }}
-          disabled={isFormOpen}
-          className={`absolute top-4 right-4 z-[1000] px-6 py-3 rounded-lg font-semibold shadow-lg 
-                     transition-all duration-300 transform animate-scaleIn
-                     ${isFormOpen 
-              ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-              : isAddMode 
-                ? 'bg-gradient-to-r from-red-500 to-red-600 text-white animate-pulse hover:scale-110 hover:shadow-2xl' 
-                : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 hover:scale-110 hover:shadow-2xl'
-          }`}
-        >
-          {isAddMode ? '❌ Cancelar' : '➕ Agregar Cámara'}
-        </button>
+
 
         {/* Indicador de modo agregar */}
         {isAddMode && (
-          <div className="absolute top-20 right-4 z-[1000] bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg animate-slideInTop">
+          <div className="fixed right-20 bottom-20 z-[1000] bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg animate-slideInRight">
             <span className="animate-bounce inline-block">📍</span> Haz click en el mapa
           </div>
         )}
@@ -985,16 +938,86 @@ export default function MapView() {
         )}
       </div>
 
-      {/* Botón flotante para abrir panel cuando está cerrado */}
+      {/* Grupo de botones flotantes - esquina inferior derecha */}
       {!isPanelOpen && (
-        <button
-          onClick={() => setIsPanelOpen(true)}
-          className="fixed right-4 bottom-4 z-[1000] bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-transform"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
+        <div className="fixed right-4 bottom-4 z-[1000] flex flex-col gap-3 items-end">
+          
+          {/* Botón de búsqueda */}
+          {!showMapSearch && (
+            <button
+              onClick={() => {
+                setShowMapSearch(true);
+                setLastInteractionTime(Date.now());
+              }}
+              className="bg-white hover:bg-white w-12 h-12 rounded-full shadow-lg hover:shadow-2xl 
+                         transition-all duration-300 flex items-center justify-center group 
+                         border-2 border-transparent hover:border-indigo-200 relative overflow-hidden animate-scaleIn"
+              title="Buscar ubicación"
+            >
+              <div className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 
+                            bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 animate-pulse"></div>
+              <svg className="w-6 h-6 text-indigo-600 group-hover:text-indigo-700 group-hover:scale-110 transition-all relative z-10" 
+                   fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+          )}
+
+          {/* Botón para activar modo agregar */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isAddMode) {
+                setShowSearchModal(true);
+              } else {
+                setIsAddMode(false);
+                isAddModeRef.current = false;
+                setShowSearchModal(false);
+              }
+            }}
+            disabled={isFormOpen}
+            className={`w-12 h-12 rounded-full shadow-lg transition-all duration-300 flex items-center justify-center 
+                       relative overflow-hidden group animate-scaleIn
+                       ${isFormOpen 
+                ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                : isAddMode 
+                  ? 'bg-gradient-to-r from-red-500 to-red-600 text-white animate-pulse hover:scale-110 hover:shadow-2xl' 
+                  : 'bg-white hover:bg-white border-2 border-transparent hover:border-blue-200 hover:scale-110 hover:shadow-2xl'
+            }`}
+            title={isAddMode ? 'Cancelar' : 'Agregar cámara'}
+          >
+            {!isAddMode && (
+              <div className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 
+                            bg-gradient-to-r from-blue-500/20 via-cyan-500/20 to-teal-500/20 animate-pulse"></div>
+            )}
+            {isAddMode ? (
+              <svg className="w-6 h-6 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6 text-blue-600 group-hover:text-blue-700 group-hover:scale-110 transition-all relative z-10" 
+                   fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+            )}
+          </button>
+
+          {/* Botón para abrir panel si está cerrado */}
+          <button
+            onClick={() => setIsPanelOpen(true)}
+            className="bg-white hover:bg-white w-12 h-12 rounded-full shadow-lg hover:shadow-2xl 
+                       transition-all duration-300 flex items-center justify-center group 
+                       border-2 border-transparent hover:border-purple-200 relative overflow-hidden hover:scale-110 animate-scaleIn"
+            title="Abrir menú"
+          >
+            <div className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 
+                          bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-red-500/20 animate-pulse"></div>
+            <svg className="w-6 h-6 text-purple-600 group-hover:text-purple-700 group-hover:scale-110 transition-all relative z-10" 
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        </div>
       )}
 
       {/* Modal de confirmación para cerrar durante agregar */}
