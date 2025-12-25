@@ -69,7 +69,9 @@ export default function MapView() {
 
     // Crear el mapa con vista inicial en el centro del área
     const center = bounds.getCenter();
-    const map = L.map(mapContainerRef.current).setView(center, 15);
+    const map = L.map(mapContainerRef.current, {
+      zoomControl: false  // Deshabilitar controles de zoom (+/-)
+    }).setView(center, 15);
 
     // Configuración optimizada para zoom out
     map.options.zoomAnimation = true;
