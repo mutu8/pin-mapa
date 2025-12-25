@@ -1,9 +1,82 @@
 @import "tailwindcss";
 
-@keyframes fade-in {
+/* Optimizado: Consolidar animaciones fadeIn */
+@keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.5) rotate(-10deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes scaleOut {
+  from {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.5) rotate(10deg);
+  }
+}
+
+@keyframes slideInTop {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
   }
   to {
     opacity: 1;
@@ -11,6 +84,141 @@
   }
 }
 
-.animate-fade-in {
-  animation: fade-in 0.5s ease-out;
+/* Clases de animaci\u00f3n - Agrupadas para mejor rendimiento */
+.animate-slideUp {
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-slideInRight {
+  animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-slideOutRight {
+  animation: slideOutRight 0.3s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-scaleOut {
+  animation: scaleOut 0.2s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.animate-slideInTop {
+  animation: slideInTop 0.3s ease-out;
+}
+
+@keyframes fadeOutScale {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.95);
+  }
+}
+
+.animate-fadeOutScale {
+  animation: fadeOutScale 0.25s ease-in forwards;
+}
+
+/* Widget Spinner Loading - Optimizado con will-change */
+@keyframes widgetSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.widget-spinner {
+  width: 40px;
+  height: 40px;
+  position: relative;
+  border: 3px solid #4f46e5;
+  border-radius: 50%;
+  display: inline-block;
+  will-change: contents;
+}
+
+.widget-spinner::before,
+.widget-spinner::before,
+.widget-spinner::after {
+  content: '';
+  position: absolute;
+  display: block;
+  background-color: #4f46e5;
+  border-radius: 1.5px;
+  transform-origin: 50% 0%;
+  left: 50%;
+  top: 50%;
+  transform: translateX(-50%);
+  will-change: transform;
+}
+
+.widget-spinner::before {
+  width: 2px;
+  height: 30%;
+  animation: widgetSpin 2000ms linear infinite;
+}
+
+.widget-spinner::after {
+  width: 2px;
+  height: 40%;
+  animation: widgetSpin 500ms linear infinite;
+}
+
+/* Page Loader Fullscreen - FiveM Style con will-change */
+.loader_bg {
+  position: fixed;
+  z-index: 9999;
+  background: #000;
+  width: 100%;
+  height: 100%;
+  will-change: opacity;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loader {
+  border: 0 solid transparent;
+  border-radius: 50%;
+  width: 150px;
+  height: 150px;
+  position: relative;
+  will-change: contents;
+}
+
+.loader:before,
+.loader:after {
+  content: '';
+  border: 1em solid #4f46e5;
+  border-radius: 50%;
+  width: inherit;
+  height: inherit;
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: loader 2s linear infinite;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.loader:before {
+  animation-delay: 0.5s;
+}
+
+@keyframes loader {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
 }

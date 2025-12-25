@@ -8,6 +8,7 @@ import { useCameras } from '../hooks/useCameras';
 import CameraForm from './CameraForm';
 import CameraList from './CameraList';
 import FilterPanel from './FilterPanel';
+import StreetSearch from '@/components/StreetSearch';
 
 // Fix para iconos de Leaflet en Next.js
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -22,6 +23,7 @@ export default function MapView() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const tempMarkerRef = useRef<L.Marker | null>(null);
+  const searchMarkerRef = useRef<L.Marker | null>(null);
   const isAddModeRef = useRef(false);
   const markersMapRef = useRef<Map<string, L.Marker>>(new Map()); // Mapa de ID -> Marker
   
@@ -42,7 +44,19 @@ export default function MapView() {
   const [isPanelOpen, setIsPanelOpen] = useState(true); // Abierto por defecto
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showAutoHideNotice, setShowAutoHideNotice] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [showOutOfBoundsError, setShowOutOfBoundsError] = useState(false);
+  const [showMapSearch, setShowMapSearch] = useState(true);
+  const [isSearchExiting, setIsSearchExiting] = useState(false);
+  const [isPanelExiting, setIsPanelExiting] = useState(false);
+  const [lastInteractionTime, setLastInteractionTime] = useState(Date.now());
   const autoHideTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Límites del área de trabajo en Trujillo
+  const TRUJILLO_BOUNDS = L.latLngBounds(
+    [-8.113, -79.041],  // Suroeste
+    [-8.085, -78.990]   // Noreste
+  );
 
   // Inicializar mapa
   useEffect(() => {
@@ -51,10 +65,7 @@ export default function MapView() {
     // Límites calculados exactamente desde los 8 puntos proporcionados
     // lat: -8.085936 (norte) a -8.112493 (sur)
     // lng: -79.040500 (oeste) a -78.990426 (este)
-    const bounds = L.latLngBounds(
-      [-8.113, -79.041],  // Suroeste más ajustado
-      [-8.085, -78.990]   // Noreste más ajustado
-    );
+    const bounds = TRUJILLO_BOUNDS;
 
     // Crear el mapa con vista inicial en el centro del área
     const center = bounds.getCenter();
@@ -98,7 +109,7 @@ export default function MapView() {
     mapRef.current = map;
 
     // Click en el mapa para agregar cámara (solo en modo agregar)
-    map.on('click', (e: L.LeafletMouseEvent) => {
+    const handleMapClick = (e: L.LeafletMouseEvent) => {
       if (!isAddModeRef.current) {
         // Si no está en modo agregar, solo cerrar formulario (no todo el panel)
         setIsFormOpen(false);
@@ -106,15 +117,21 @@ export default function MapView() {
         setNewMarkerPosition(null);
         
         // Remover marcador temporal si existe
-        if (tempMarkerRef.current) {
+        if (tempMarkerRef.current && map) {
           map.removeLayer(tempMarkerRef.current);
           tempMarkerRef.current = null;
         }
         return;
       }
 
+      // Remover marcador de búsqueda si existe
+      if (searchMarkerRef.current && map) {
+        map.removeLayer(searchMarkerRef.current);
+        searchMarkerRef.current = null;
+      }
+
       // Remover marcador temporal anterior si existe (permitir cambiar de posición)
-      if (tempMarkerRef.current) {
+      if (tempMarkerRef.current && map) {
         map.removeLayer(tempMarkerRef.current);
         tempMarkerRef.current = null;
       }
@@ -149,35 +166,236 @@ export default function MapView() {
       setNewMarkerPosition({ lat: e.latlng.lat, lng: e.latlng.lng });
       setSelectedCamera(null);
       
-      // Si el formulario no está abierto, abrirlo en modo edición
-      if (!isFormOpen) {
-        setIsFormOpen(true);
-        setIsPanelOpen(true);
-        setIsViewMode(false); // Modo edición para agregar
-      }
+      // Abrir formulario y panel
+      setIsFormOpen(true);
+      setIsPanelOpen(true);
+      setIsViewMode(false);
       
-      // Desactivar modo agregar solo después del primer click
+      // Desactivar modo agregar después del click
       setIsAddMode(false);
-    });
+      isAddModeRef.current = false;
+    };
 
-    // Ocultar panel cuando se navega por el mapa
-    map.on('dragstart', () => {
-      if (isPanelOpen && !isFormOpen) {
-        setIsPanelOpen(false);
-      }
-    });
-
-    map.on('zoomstart', () => {
-      if (isPanelOpen && !isFormOpen) {
-        setIsPanelOpen(false);
-      }
-    });
+    map.on('click', handleMapClick);
 
     return () => {
-      map.remove();
+      if (map) {
+        map.off('click', handleMapClick);
+        map.remove();
+      }
       mapRef.current = null;
     };
   }, []);
+
+  // Manejador para cuando se selecciona una ubicación en el buscador
+  const handleSelectLocation = useCallback((lat: number, lon: number) => {
+    const map = mapRef.current;
+    if (!map || !map.getContainer()) return;
+
+    // Validar que la ubicación esté dentro de los límites permitidos
+    if (!TRUJILLO_BOUNDS.contains([lat, lon])) {
+      setShowOutOfBoundsError(true);
+      // Ocultar mensaje después de 4 segundos
+      setTimeout(() => {
+        setShowOutOfBoundsError(false);
+      }, 4000);
+      return;
+    }
+
+    try {
+      // Si el modal de búsqueda está abierto (modo agregar cámara potencial)
+      if (showSearchModal) {
+        // Cerrar modal de búsqueda PRIMERO
+        setShowSearchModal(false);
+        
+        // Activar modo agregar AHORA (después de cerrar modal)
+        setIsAddMode(true);
+        isAddModeRef.current = true;
+        
+        // Pequeño delay para que el modal se cierre antes del flyTo
+        setTimeout(() => {
+          // Volar al punto
+          map.flyTo([lat, lon], 17, {
+            duration: 1.5,
+            easeLinearity: 0.25
+          });
+
+          // Remover marcador de búsqueda anterior si existe
+          if (searchMarkerRef.current) {
+            map.removeLayer(searchMarkerRef.current);
+            searchMarkerRef.current = null;
+          }
+
+          // Crear marcador RGB temporal
+          const searchIcon = L.divIcon({
+            className: 'custom-search-marker',
+            html: `
+              <div style="position: relative; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                <div class="search-marker-pulse"></div>
+                <svg width="24" height="24" viewBox="0 0 24 24" style="position: relative; z-index: 2; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
+                  <circle cx="12" cy="12" r="10" fill="white" stroke="#4f46e5" stroke-width="2"/>
+                  <circle cx="12" cy="12" r="4" fill="#4f46e5"/>
+                </svg>
+              </div>
+              <style>
+                @keyframes rgbPulse {
+                  0%, 100% { 
+                    box-shadow: 0 0 20px 5px rgba(79, 70, 229, 0.6),
+                                0 0 40px 10px rgba(139, 92, 246, 0.4),
+                                0 0 60px 15px rgba(167, 139, 250, 0.2);
+                  }
+                  50% { 
+                    box-shadow: 0 0 30px 8px rgba(139, 92, 246, 0.8),
+                                0 0 50px 15px rgba(167, 139, 250, 0.6),
+                                0 0 70px 20px rgba(196, 181, 253, 0.3);
+                  }
+                }
+                .search-marker-pulse {
+                  position: absolute;
+                  width: 100%;
+                  height: 100%;
+                  border-radius: 50%;
+                  background: radial-gradient(circle, rgba(79, 70, 229, 0.3) 0%, transparent 70%);
+                  animation: rgbPulse 2s ease-in-out infinite;
+                }
+              </style>
+            `,
+            iconSize: [40, 40],
+            iconAnchor: [20, 20],
+          });
+
+          const searchMarker = L.marker([lat, lon], { icon: searchIcon }).addTo(map);
+          searchMarkerRef.current = searchMarker;
+
+          // Remover marcador después de 6 segundos
+          setTimeout(() => {
+            if (searchMarkerRef.current) {
+              map.removeLayer(searchMarkerRef.current);
+              searchMarkerRef.current = null;
+            }
+          }, 6000);
+        }, 100); // Delay de 100ms para cerrar modal primero
+        
+        return;
+      } else {
+        // Modo normal: solo volar y mostrar marcador (SIN abrir panel, SIN colocar pin)
+        map.flyTo([lat, lon], 17, {
+          duration: 1.5,
+          easeLinearity: 0.25
+        });
+
+        // Remover marcador de búsqueda anterior si existe
+        if (searchMarkerRef.current) {
+          map.removeLayer(searchMarkerRef.current);
+          searchMarkerRef.current = null;
+        }
+
+        // Modo normal: crear marcador visual temporal con efecto RGB
+        const searchIcon = L.divIcon({
+          className: 'custom-search-marker',
+          html: `
+            <div style="position: relative; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+              <div class="search-marker-pulse"></div>
+              <svg width="24" height="24" viewBox="0 0 24 24" style="position: relative; z-index: 2; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
+                <circle cx="12" cy="12" r="10" fill="white" stroke="#4f46e5" stroke-width="2"/>
+                <circle cx="12" cy="12" r="4" fill="#4f46e5"/>
+              </svg>
+            </div>
+            <style>
+              @keyframes rgbPulse {
+                0%, 100% { 
+                  box-shadow: 0 0 20px 5px rgba(79, 70, 229, 0.6),
+                              0 0 40px 10px rgba(139, 92, 246, 0.4),
+                              0 0 60px 15px rgba(167, 139, 250, 0.2);
+                }
+                50% { 
+                  box-shadow: 0 0 30px 8px rgba(139, 92, 246, 0.8),
+                              0 0 50px 15px rgba(167, 139, 250, 0.6),
+                              0 0 70px 20px rgba(196, 181, 253, 0.3);
+                }
+              }
+              .search-marker-pulse {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                border-radius: 50%;
+                background: radial-gradient(circle, rgba(79, 70, 229, 0.3) 0%, transparent 70%);
+                animation: rgbPulse 2s ease-in-out infinite;
+              }
+            </style>
+          `,
+          iconSize: [40, 40],
+          iconAnchor: [20, 20],
+        });
+
+        const searchMarker = L.marker([lat, lon], { icon: searchIcon }).addTo(map);
+        searchMarkerRef.current = searchMarker;
+
+        // Remover marcador después de 4 segundos con fade
+        setTimeout(() => {
+          if (searchMarkerRef.current) {
+            map.removeLayer(searchMarkerRef.current);
+            searchMarkerRef.current = null;
+          }
+        }, 4000);
+      }
+    } catch (error) {
+      console.error('Error al centrar el mapa:', error);
+    }
+  }, [showSearchModal]);
+
+  // Callback para notificar interacción del usuario
+  const handleSearchInteraction = useCallback(() => {
+    setLastInteractionTime(Date.now());
+  }, []);
+
+  // Función para ocultar con animación
+  const hideMapSearch = useCallback(() => {
+    setIsSearchExiting(true);
+    setTimeout(() => {
+      setShowMapSearch(false);
+      setIsSearchExiting(false);
+    }, 250); // Duración de la animación
+  }, []);
+
+  // Función para ocultar panel con animación
+  const hidePanel = useCallback(() => {
+    setIsPanelExiting(true);
+    setTimeout(() => {
+      setIsPanelOpen(false);
+      setIsPanelExiting(false);
+    }, 250); // Duración de la animación
+  }, []);
+
+  // Manejar eventos de navegación del mapa (drag/zoom) para ocultar panel
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const handleDragStart = () => {
+      // NO cerrar panel si está en modo agregar o si el modal de búsqueda está abierto
+      if (isPanelOpen && !isFormOpen && !isAddMode && !showSearchModal) {
+        hidePanel();
+      }
+    };
+
+    const handleZoomStart = () => {
+      // NO cerrar panel si está en modo agregar o si el modal de búsqueda está abierto
+      if (isPanelOpen && !isFormOpen && !isAddMode && !showSearchModal) {
+        hidePanel();
+      }
+    };
+
+    map.on('dragstart', handleDragStart);
+    map.on('zoomstart', handleZoomStart);
+
+    return () => {
+      if (map) {
+        map.off('dragstart', handleDragStart);
+        map.off('zoomstart', handleZoomStart);
+      }
+    };
+  }, [isPanelOpen, isFormOpen, isAddMode, showSearchModal, hidePanel]);
 
   // Cambiar cursor según el modo
   useEffect(() => {
@@ -359,7 +577,7 @@ export default function MapView() {
     if (wasAddingNew) {
       setIsAddMode(false);
       isAddModeRef.current = false;
-      setIsPanelOpen(false);
+      hidePanel();
     }
     // Si estaba editando/viendo una cámara existente, mantener panel abierto
     
@@ -376,7 +594,7 @@ export default function MapView() {
       setShowCloseConfirm(true);
     } else {
       // Cerrar normalmente
-      setIsPanelOpen(false);
+      hidePanel();
       setIsFormOpen(false);
     }
   };
@@ -389,7 +607,7 @@ export default function MapView() {
     setIsAddMode(false);
     isAddModeRef.current = false;
     setIsViewMode(false);
-    setIsPanelOpen(false);
+    hidePanel();
     setShowCloseConfirm(false);
     
     // Remover marcador temporal
@@ -409,7 +627,7 @@ export default function MapView() {
       autoHideTimerRef.current = setTimeout(() => {
         setShowAutoHideNotice(true);
         setTimeout(() => {
-          setIsPanelOpen(false);
+          hidePanel();
           setShowAutoHideNotice(false);
         }, 2000); // Mostrar notificación 2 segundos antes de ocultar
       }, 15000); // 15 segundos de inactividad
@@ -424,7 +642,7 @@ export default function MapView() {
         clearTimeout(autoHideTimerRef.current);
       }
     };
-  }, [isPanelOpen, isFormOpen, cameras, filters]);
+  }, [isPanelOpen, isFormOpen, cameras, filters, hidePanel]);
 
   // Reajustar tamaño del mapa cuando el panel se abre/cierra
   useEffect(() => {
@@ -438,26 +656,110 @@ export default function MapView() {
     return () => clearTimeout(timer);
   }, [isPanelOpen]);
 
+  // Auto-ocultar buscador del mapa después de 8 segundos de inactividad
+  useEffect(() => {
+    if (!showMapSearch) return;
+
+    const checkInactivity = () => {
+      const now = Date.now();
+      const timeSinceLastInteraction = now - lastInteractionTime;
+      
+      if (timeSinceLastInteraction >= 8000) {
+        hideMapSearch();
+      }
+    };
+
+    // Verificar cada segundo si han pasado 8 segundos sin interacción
+    const interval = setInterval(checkInactivity, 1000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [showMapSearch, lastInteractionTime, hideMapSearch]);
+
   return (
     <div className="flex h-full">
       {/* Mapa */}
       <div ref={mapContainerRef} className="flex-1 relative">
         {loading && (
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white px-4 py-2 rounded shadow z-[1000]">
-            Cargando cámaras...
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white px-6 py-4 rounded-2xl shadow-2xl z-[1000] animate-scaleIn border-2 border-indigo-100">
+            <div className="flex items-center gap-4">
+              <div className="widget-spinner"></div>
+              <span className="text-indigo-900 font-semibold">Cargando cámaras...</span>
+            </div>
           </div>
+        )}
+
+        {/* Mensaje de error fuera de rango (en el mapa) */}
+        {showOutOfBoundsError && !showSearchModal && (
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-[1000] animate-slideInTop">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span className="font-semibold">Ubicación fuera del área permitida</span>
+            </div>
+          </div>
+        )}
+
+        {/* Buscador flotante de navegación - centrado */}
+        {showMapSearch && (
+          <div className={`absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] w-96 ${
+            isSearchExiting ? 'animate-fadeOutScale' : 'animate-slideInTop'
+          }`}>
+            <StreetSearch 
+              onSelectLocation={handleSelectLocation}
+              onInteraction={handleSearchInteraction}
+            />
+          </div>
+        )}
+        
+        {!showMapSearch && (
+          /* Botón para mostrar buscador - solo icono con hover RGB */
+          <button
+            onClick={() => {
+              setShowMapSearch(true);
+              setLastInteractionTime(Date.now());
+            }}
+            className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] 
+                     bg-white hover:bg-white
+                     w-12 h-12 rounded-full shadow-lg
+                     hover:shadow-2xl transition-all duration-300 
+                     flex items-center justify-center group animate-scaleIn
+                     border-2 border-transparent hover:border-indigo-200
+                     relative overflow-hidden"
+            title="Buscar ubicación"
+          >
+            {/* Efecto RGB en hover */}
+            <div className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 animate-pulse"></div>
+            <svg className="w-6 h-6 text-indigo-600 group-hover:text-indigo-700 group-hover:scale-110 transition-all relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </button>
         )}
         
         {/* Botón para activar modo agregar */}
         <button
-          onClick={() => setIsAddMode(!isAddMode)}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!isAddMode) {
+              // Solo abrir modal de búsqueda, NO activar modo agregar todavía
+              setShowSearchModal(true);
+            } else {
+              // Cancelar modo agregar
+              setIsAddMode(false);
+              isAddModeRef.current = false;
+              setShowSearchModal(false);
+            }
+          }}
           disabled={isFormOpen}
-          className={`absolute top-4 right-4 z-[1000] px-6 py-3 rounded-lg font-semibold shadow-lg transition-all transform ${
-            isFormOpen 
+          className={`absolute top-4 right-4 z-[1000] px-6 py-3 rounded-lg font-semibold shadow-lg 
+                     transition-all duration-300 transform animate-scaleIn
+                     ${isFormOpen 
               ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
               : isAddMode 
-                ? 'bg-gradient-to-r from-red-500 to-red-600 text-white animate-pulse hover:scale-105' 
-                : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 hover:scale-105'
+                ? 'bg-gradient-to-r from-red-500 to-red-600 text-white animate-pulse hover:scale-110 hover:shadow-2xl' 
+                : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 hover:scale-110 hover:shadow-2xl'
           }`}
         >
           {isAddMode ? '❌ Cancelar' : '➕ Agregar Cámara'}
@@ -465,20 +767,114 @@ export default function MapView() {
 
         {/* Indicador de modo agregar */}
         {isAddMode && (
-          <div className="absolute top-20 right-4 z-[1000] bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg animate-bounce">
-            📍 Haz click en el mapa
+          <div className="absolute top-20 right-4 z-[1000] bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg animate-slideInTop">
+            <span className="animate-bounce inline-block">📍</span> Haz click en el mapa
+          </div>
+        )}
+
+        {/* Modal de búsqueda de calles */}
+        {showSearchModal && (
+          <div 
+            className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fadeIn"
+            onClick={(e) => {
+              // Solo cerrar si se hace click en el backdrop
+              if (e.target === e.currentTarget) {
+                setShowSearchModal(false);
+              }
+            }}
+          >
+            <div 
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-slideUp"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header del modal */}
+              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Buscar Ubicación</h3>
+                    <p className="text-indigo-100 text-sm">Encuentra la calle para tu cámara</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSearchModal(false)}
+                  className="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-lg transition-all"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Contenido del modal */}
+              <div className="p-6">
+                {/* Mensaje de error si está fuera de rango */}
+                {showOutOfBoundsError && (
+                  <div className="mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg animate-fadeIn">
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <div className="text-sm text-red-900">
+                        <p className="font-semibold">Ubicación fuera del área de trabajo</p>
+                        <p className="mt-1 text-red-700">La ubicación seleccionada está fuera del área permitida en Trujillo. Por favor, busca una dirección dentro de la zona Centro.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mb-4">
+                  <StreetSearch onSelectLocation={handleSelectLocation} />
+                </div>
+
+                <div className="bg-indigo-50 border-l-4 border-indigo-500 p-4 rounded-r-lg">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div className="text-sm text-indigo-900">
+                      <p className="font-semibold mb-1">¿Cómo funciona?</p>
+                      <ol className="list-decimal list-inside space-y-1 text-indigo-700">
+                        <li>Busca la calle donde quieres colocar la cámara</li>
+                        <li>El mapa se centrará en esa ubicación con un marcador RGB</li>
+                        <li>Luego haz <strong>click en el mapa</strong> para colocar la cámara exactamente donde quieras</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowSearchModal(false);
+                      // Activar modo agregar cuando cierra el modal
+                      setIsAddMode(true);
+                      isAddModeRef.current = true;
+                    }}
+                    className="flex-1 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-medium hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg"
+                  >
+                    Continuar sin buscar
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
 
       {/* Panel lateral */}
       <div 
-        className={`bg-white shadow-lg overflow-y-auto flex flex-col transition-all duration-300 ease-out ${
-          isPanelOpen ? 'w-96' : 'w-0'
+        className={`bg-white shadow-lg overflow-y-auto flex flex-col transition-all duration-500 ease-in-out ${
+          isPanelOpen ? (isPanelExiting ? 'w-96 animate-fadeOutScale' : 'w-96 animate-slideInRight') : 'w-0'
         }`}
         style={{ 
           willChange: isPanelOpen ? 'auto' : 'width',
-          transform: 'translateZ(0)' // Force GPU acceleration
+          transform: isPanelOpen ? 'translateX(0)' : 'translateX(100%)',
+          opacity: isPanelOpen ? 1 : 0
         }}
         onMouseEnter={resetAutoHideTimer}
         onMouseMove={resetAutoHideTimer}
@@ -488,9 +884,9 @@ export default function MapView() {
           <>
             {/* Notificación sutil de auto-ocultado */}
             {showAutoHideNotice && (
-              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1100] animate-fade-in">
+              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1100] animate-slideInTop">
                 <div className="bg-indigo-600 text-white px-4 py-2 rounded-full shadow-2xl text-sm flex items-center gap-2">
-                  <svg className="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 animate-spin" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                   </svg>
                   Panel ocultándose...

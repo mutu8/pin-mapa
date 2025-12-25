@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { Camera, CameraStatus, CameraType, getLocationColor } from '../types/camera.types';
 
 interface CameraListProps {
@@ -24,7 +24,7 @@ const typeConfig = {
   [CameraType.BULLET]: '🔫',
 };
 
-export default function CameraList({ cameras, selectedCamera, onSelectCamera, onDeleteCamera }: CameraListProps) {
+function CameraList({ cameras, selectedCamera, onSelectCamera, onDeleteCamera }: CameraListProps) {
   const [cameraToDelete, setCameraToDelete] = useState<Camera | null>(null);
   
   const handleDelete = (e: React.MouseEvent, camera: Camera) => {
@@ -208,3 +208,5 @@ export default function CameraList({ cameras, selectedCamera, onSelectCamera, on
     </div>
   );
 }
+
+export default memo(CameraList);

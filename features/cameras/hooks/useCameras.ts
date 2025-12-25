@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Camera, CreateCameraDto, UpdateCameraDto, CameraFilters } from '../types/camera.types';
 // Cambiar entre localStorage y Supabase según configuración
 import { SupabaseCameraRepository } from '../repositories/supabase.repository';
@@ -33,7 +33,7 @@ export function useCameras(filters?: CameraFilters) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadCameras = async () => {
+  const loadCameras = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -48,13 +48,13 @@ export function useCameras(filters?: CameraFilters) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
 
   useEffect(() => {
     loadCameras();
-  }, [filters?.type, filters?.status, filters?.location, filters?.searchText]);
+  }, [loadCameras]);
 
-  const createCamera = async (data: CreateCameraDto) => {
+  const createCamera = useCallback(async (data: CreateCameraDto) => {
     try {
       setError(null);
       const newCamera = await cameraRepository.create(data);
@@ -66,9 +66,9 @@ export function useCameras(filters?: CameraFilters) {
       setError(errorMsg);
       throw new Error(errorMsg);
     }
-  };
+  }, []);
 
-  const updateCamera = async (id: string, data: UpdateCameraDto) => {
+  const updateCamera = useCallback(async (id: string, data: UpdateCameraDto) => {
     try {
       setError(null);
       const updated = await cameraRepository.update(id, data);
@@ -80,9 +80,9 @@ export function useCameras(filters?: CameraFilters) {
       setError(errorMsg);
       throw new Error(errorMsg);
     }
-  };
+  }, []);
 
-  const deleteCamera = async (id: string) => {
+  const deleteCamera = useCallback(async (id: string) => {
     try {
       setError(null);
       await cameraRepository.delete(id);
@@ -93,7 +93,7 @@ export function useCameras(filters?: CameraFilters) {
       setError(errorMsg);
       throw new Error(errorMsg);
     }
-  };
+  }, []);
 
   return {
     cameras,    allCameras,    loading,
