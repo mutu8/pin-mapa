@@ -704,9 +704,11 @@ export default function MapView() {
 
         {/* Buscador flotante de navegación - centrado */}
         {showMapSearch && (
-          <div className={`absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] w-96 ${
+          <div className={`absolute top-4 sm:top-4 md:top-4 left-1/2 transform -translate-x-1/2 z-[1100] w-96 max-w-[calc(100vw-2rem)] ${
             isSearchExiting ? 'animate-fadeOutScale' : 'animate-slideInTop'
-          }`}>
+          }`}
+            style={{ marginTop: 'max(1rem, env(safe-area-inset-top))' }}
+          >
             <StreetSearch 
               onSelectLocation={handleSelectLocation}
               onInteraction={handleSearchInteraction}
